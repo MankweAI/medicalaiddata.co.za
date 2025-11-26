@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PricingEngine } from '@/utils/engine';
 import { AlertTriangle, ChevronDown, Users, Filter } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import PlanDetails from './PlanDetails';
 
@@ -26,6 +27,7 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] | null }) 
     const [members, setMembers] = useState({ main: 1, adult: 0, child: 0 });
     const [income, setIncome] = useState<number>(0);
     const [networkChoice, setNetworkChoice] = useState<string>('Standard');
+    const searchParams = useSearchParams();
 
     const safePlans = plans || [];
 
@@ -63,6 +65,16 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] | null }) 
             setSelectedPlanId(safePlans[0].id);
         }
     }, [filteredPlans, selectedPlanId, safePlans]);
+
+    useEffect(() => {
+        const urlPlanId = searchParams.get('plan');
+        if (urlPlanId && plans?.some(p => p.id === urlPlanId)) {
+            setSelectedPlanId(urlPlanId);
+            // Scroll to calculator on load if param exists
+            const element = document.getElementById('calculator-view');
+            if (element) element.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [searchParams, plans]);
 
     // --- DERIVED STATE: CALCULATIONS ---
     const calculationResult = useMemo(() => {

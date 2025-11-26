@@ -1,40 +1,22 @@
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, AlertTriangle, Shield, Activity, Baby, Pill } from 'lucide-react';
+import { ArrowLeft, Shield, Activity, Baby, Pill } from 'lucide-react';
 import { Metadata } from 'next';
+import BenefitPlanCard from '@/components/BenefitPlanCard';
 
-// Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
-// --- CONFIGURATION ---
 const BENEFIT_META: Record<string, any> = {
-    'oncology': {
-        title: 'Best Medical Aid for Cancer Cover (2026)',
-        description: 'Compare oncology thresholds, co-payments, and biological drug coverage across top South African schemes.',
-        icon: Activity
-    },
-    'maternity': {
-        title: 'Top Medical Aids for Pregnancy & Birth',
-        description: 'Find plans with the best antenatal visits, private ward cover, and pediatrician benefits.',
-        icon: Baby
-    },
-    'chronic': {
-        title: 'Chronic Medication Cover Comparison',
-        description: 'Which plans cover more than just the basic 27 CDL conditions? Compare formularies and limits.',
-        icon: Pill
-    },
-    'default': {
-        title: 'Medical Aid Benefit Comparison',
-        description: 'Compare specific medical aid benefits side-by-side.',
-        icon: Shield
-    }
+    'oncology': { title: 'Best Medical Aid for Cancer Cover (2026)', description: 'Compare oncology thresholds, co-payments, and biological drug coverage across top South African schemes.', icon: Activity },
+    'maternity': { title: 'Top Medical Aids for Pregnancy & Birth', description: 'Find plans with the best antenatal visits, private ward cover, and pediatrician benefits.', icon: Baby },
+    'chronic': { title: 'Chronic Medication Cover Comparison', description: 'Which plans cover more than just the basic 27 CDL conditions? Compare formularies and limits.', icon: Pill },
+    'default': { title: 'Medical Aid Benefit Comparison', description: 'Compare specific medical aid benefits side-by-side.', icon: Shield }
 };
 
 type Props = {
     params: Promise<{ slug: string }>;
 };
 
-// 1. SEO Metadata Generator
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const { slug } = await params;
     const meta = BENEFIT_META[slug] || BENEFIT_META['default'];
@@ -44,7 +26,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
 }
 
-// 2. The Page Component
 export default async function BenefitPage({ params }: Props) {
     const { slug } = await params;
 
@@ -115,24 +96,20 @@ export default async function BenefitPage({ params }: Props) {
                 </div>
 
                 {/* COMPARISON GRID */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-24">
                     {rawData.map((item: any) => {
                         const plan = item.plans;
-                        // Safety check: Ensure plan exists (handling orphan benefits)
+                        // Safety check: Ensure plan exists
                         if (!plan) return null;
 
-                        // Handle array vs object for plan_series (Supabase quirk)
                         const series = Array.isArray(plan.plan_series) ? plan.plan_series[0] : plan.plan_series;
                         const scheme = Array.isArray(series?.schemes) ? series?.schemes[0] : series?.schemes;
                         const schemeName = scheme?.name || 'Medical Aid';
 
                         // Helper to get a "Price From" value
                         const getPrice = (c: any) => {
-                            // Handle array (Income Banded) vs Object (Fixed)
                             const matrix = Array.isArray(c?.pricing_matrix) ? c.pricing_matrix[0] : c?.pricing_matrix;
-
                             if (!matrix) return 'N/A';
-
                             if (c.pricing_model === 'Income_Banded') {
                                 return `From R${matrix.main}`;
                             }
@@ -142,51 +119,13 @@ export default async function BenefitPage({ params }: Props) {
                         const priceDisplay = getPrice(plan.contributions?.[0]);
 
                         return (
-                            <div key={plan.id + item.benefit_name} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
-                                {/* Card Header */}
-                                <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                                    <div className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
-                                        {schemeName}
-                                    </div>
-                                    <h3 className="text-xl font-bold text-slate-900 mb-2 leading-snug">
-                                        {plan.name}
-                                    </h3>
-                                    <div className="text-slate-500 text-sm font-medium bg-white px-3 py-1 rounded-full border border-slate-200 w-fit">
-                                        {priceDisplay} <span className="text-xs">/pm</span>
-                                    </div>
-                                </div>
-
-                                {/* Benefit Detail */}
-                                <div className="p-6 flex-grow flex flex-col">
-                                    <div className="mb-4">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">
-                                            {item.benefit_name}
-                                        </span>
-                                        <p className="text-slate-800 font-medium mt-2 leading-relaxed">
-                                            {item.display_text || "Standard scheme rules apply."}
-                                        </p>
-                                    </div>
-
-                                    {/* Technical Rules (Badges) */}
-                                    <div className="flex flex-wrap gap-2 mt-auto pt-4">
-                                        {item.rule_logic?.threshold && (
-                                            <span className="px-2 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded border border-green-100">
-                                                Limit: R{item.rule_logic.threshold.toLocaleString()}
-                                            </span>
-                                        )}
-                                        {item.rule_logic?.co_pay && (
-                                            <span className="px-2 py-1 bg-orange-50 text-orange-700 text-[10px] font-bold rounded border border-orange-100">
-                                                Co-Pay: {item.rule_logic.co_pay}
-                                            </span>
-                                        )}
-                                        {item.rule_logic?.deductible > 0 && (
-                                            <span className="px-2 py-1 bg-red-50 text-red-700 text-[10px] font-bold rounded border border-red-100">
-                                                Deductible: R{item.rule_logic.deductible}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                            <BenefitPlanCard
+                                key={plan.id + item.benefit_name}
+                                plan={plan}
+                                item={item}
+                                schemeName={schemeName}
+                                priceDisplay={priceDisplay}
+                            />
                         );
                     })}
                 </div>
