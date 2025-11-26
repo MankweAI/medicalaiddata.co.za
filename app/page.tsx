@@ -63,7 +63,7 @@ export default async function MedicalAidPage() {
           <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight mb-2">
             Medical Aid Calculator 2026
           </h1>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+          <p className="text-lg text-slate-700 max-w-2xl mx-auto">
             Compare Discovery Health plans instantly. Our engine calculates your exact premium, savings, and hidden network penalties.
           </p>
         </div>

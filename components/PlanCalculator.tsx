@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { PricingEngine, UserScenario } from '@/utils/engine';
-import { AlertTriangle, CheckCircle, Info, ChevronDown, Users, Filter } from 'lucide-react';
+import { PricingEngine } from '@/utils/engine';
+import { AlertTriangle, ChevronDown, Users, Filter } from 'lucide-react';
 import clsx from 'clsx';
 
 // Define the shape of data passed from the server
@@ -11,66 +11,85 @@ interface PlanData {
     name: string;
     slug: string;
     type: string;
-    target_personas: string[];
+    target_personas: string[] | null; // Can be null from DB
     contributions: any[]; // JSONB from DB
     benefits: any[];      // JSONB from DB
 }
 
-export default function PlanCalculator({ plans }: { plans: PlanData[] }) {
+export default function PlanCalculator({ plans }: { plans: PlanData[] | null }) {
     // --- STATE MANAGEMENT ---
     const [activePersona, setActivePersona] = useState<string>('All');
-    // Initialize with the first plan in the list (fallback logic handled in effect)
-    const [selectedPlanId, setSelectedPlanId] = useState<string>(plans[0]?.id || '');
+    const [selectedPlanId, setSelectedPlanId] = useState<string>('');
     const [members, setMembers] = useState({ main: 1, adult: 0, child: 0 });
     const [income, setIncome] = useState<number>(0);
     const [networkChoice, setNetworkChoice] = useState<string>('Standard');
 
+    // Safe plans array (handle null case to prevent crash)
+    const safePlans = plans || [];
+
     // --- DERIVED STATE: PERSONAS ---
-    // 1. Extract unique personas from the plans list for the filter bar
+    // 1. Extract unique personas safely
     const uniquePersonas = useMemo(() => {
         const all = new Set<string>();
-        plans.forEach(p => {
-            // Defensive check: Ensure target_personas is actually an array before looping
+        safePlans.forEach(p => {
+            // DEFENSIVE CHECK: Only add if it is a real array
             if (Array.isArray(p.target_personas)) {
                 p.target_personas.forEach(tp => all.add(tp));
             }
         });
         return Array.from(all).sort();
-    }, [plans]);
+    }, [safePlans]);
 
     // --- DERIVED STATE: FILTERED PLANS ---
     // 2. Filter the dropdown based on the selected Persona
     const filteredPlans = useMemo(() => {
-        if (activePersona === 'All') return plans;
-        return plans.filter(p => p.target_personas?.includes(activePersona));
-    }, [plans, activePersona]);
+        if (activePersona === 'All') return safePlans;
+        return safePlans.filter(p =>
+            Array.isArray(p.target_personas) && p.target_personas.includes(activePersona)
+        );
+    }, [safePlans, activePersona]);
 
     // 3. Find the currently selected active plan object
     const selectedPlan = useMemo(() =>
-        plans.find(p => p.id === selectedPlanId),
-        [plans, selectedPlanId]);
+        safePlans.find(p => p.id === selectedPlanId),
+        [safePlans, selectedPlanId]);
+
+    // --- EFFECT: AUTO-SELECT FIRST PLAN ---
+    useEffect(() => {
+        // If current selection is hidden by filter, select the first visible one
+        if (filteredPlans.length > 0) {
+            const isCurrentVisible = filteredPlans.find(p => p.id === selectedPlanId);
+            if (!isCurrentVisible) {
+                setSelectedPlanId(filteredPlans[0].id);
+            }
+        } else if (safePlans.length > 0 && !selectedPlanId) {
+            // Fallback for initial load
+            setSelectedPlanId(safePlans[0].id);
+        }
+    }, [filteredPlans, selectedPlanId, safePlans]);
 
     // --- DERIVED STATE: CALCULATIONS ---
     const calculationResult = useMemo(() => {
-        if (!selectedPlan || !selectedPlan.contributions[0]) return null;
+        if (!selectedPlan || !selectedPlan.contributions?.[0]) return null;
 
         const contributionData = selectedPlan.contributions[0];
 
-        // Safety check: Pricing Engine must be imported correctly
         try {
+            // 1. Calculate Premium
             const premium = PricingEngine.calculatePremium(
                 contributionData,
                 members,
                 income
             );
 
+            // 2. Calculate Thresholds (if applicable)
             const thresholds = PricingEngine.calculateThresholds(
                 contributionData,
                 members
             );
 
+            // 3. Check Network Penalties (Simulated Logic)
             let penalty = 0;
-            // Network logic simulation
             if (selectedPlan.name.includes("Delta") && networkChoice !== 'Delta') {
                 penalty = 11100;
             }
@@ -82,25 +101,13 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] }) {
         }
     }, [selectedPlan, members, income, networkChoice]);
 
-    // --- EFFECT: AUTO-SELECT FIRST PLAN ---
-    // When the filter changes (e.g., user clicks "Student"), auto-select the first plan in that list
-    useEffect(() => {
-        if (filteredPlans.length > 0) {
-            // Only change if the current selection is no longer in the visible list
-            const isCurrentVisible = filteredPlans.find(p => p.id === selectedPlanId);
-            if (!isCurrentVisible) {
-                setSelectedPlanId(filteredPlans[0].id);
-            }
-        }
-    }, [filteredPlans, selectedPlanId]);
-
     // --- HANDLERS ---
     const increment = (key: keyof typeof members) =>
         setMembers(prev => ({ ...prev, [key]: prev[key] + 1 }));
     const decrement = (key: keyof typeof members) =>
         setMembers(prev => ({ ...prev, [key]: Math.max(0, prev[key] - 1) }));
 
-    if (!selectedPlan) return <div className="p-8 text-center text-slate-500">Loading Plan Data...</div>;
+    if (!selectedPlan) return <div className="p-8 text-center text-slate-500">Loading Plans...</div>;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -108,7 +115,7 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] }) {
             {/* LEFT COLUMN: INPUTS */}
             <div className="lg:col-span-2 space-y-6">
 
-                {/* 0. PERSONA FILTER BAR (New Feature) */}
+                {/* 0. PERSONA FILTER BAR */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <div className="flex items-center gap-2 mb-3 text-sm font-bold text-slate-500 uppercase tracking-wider">
                         <Filter className="w-4 h-4" /> Filter by Lifestyle
@@ -142,7 +149,7 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] }) {
                     </div>
                 </div>
 
-                {/* 1. Plan Selector (Now Filtered) */}
+                {/* 1. Plan Selector */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <label className="block text-sm font-bold text-slate-700 mb-2">
                         Select Medical Aid Plan ({filteredPlans.length} available)
@@ -151,10 +158,10 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] }) {
                         <select
                             value={selectedPlanId}
                             onChange={(e) => setSelectedPlanId(e.target.value)}
-                            className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg appearance-none focus:ring-2 focus:ring-blue-500 outline-none text-lg font-medium"
+                            className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg appearance-none focus:ring-2 focus:ring-blue-500 outline-none text-lg font-medium text-slate-900"
                         >
                             {filteredPlans.map(plan => (
-                                <option key={plan.id} value={plan.id}>
+                                <option key={plan.id} value={plan.id} className="text-slate-900">
                                     {plan.name} ({plan.type})
                                 </option>
                             ))}
@@ -162,7 +169,7 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] }) {
                         <ChevronDown className="absolute right-4 top-4 w-5 h-5 text-slate-400 pointer-events-none" />
                     </div>
 
-                    {/* Active Persona Badges (Visual Confirmation) */}
+                    {/* Active Persona Badges */}
                     <div className="mt-4 flex flex-wrap gap-2">
                         {Array.isArray(selectedPlan.target_personas) && selectedPlan.target_personas.map(persona => (
                             <span key={persona} className={clsx(
@@ -260,7 +267,7 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] }) {
                 <div className="sticky top-6 bg-slate-900 text-white p-6 rounded-2xl shadow-xl">
                     <div className="mb-6">
                         <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Estimated Monthly Premium</span>
-                        <div className="text-4xl font-black mt-1" suppressHydrationWarning>
+                        <div className="text-4xl font-black mt-1">
                             {calculationResult
                                 ? new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(calculationResult.premium)
                                 : "---"}
