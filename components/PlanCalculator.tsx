@@ -16,7 +16,6 @@ interface PlanData {
     target_personas: string[] | null;
     contributions: any[];
     benefits: any[];
-    // FLEXIBLE TYPE: Can be Array (if inferred) or Object (if N:1 relation)
     plan_series?: any;
 }
 
@@ -70,7 +69,6 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] | null }) 
         const urlPlanId = searchParams.get('plan');
         if (urlPlanId && plans?.some(p => p.id === urlPlanId)) {
             setSelectedPlanId(urlPlanId);
-            // Scroll to calculator on load if param exists
             const element = document.getElementById('calculator-view');
             if (element) element.scrollIntoView({ behavior: 'smooth' });
         }
@@ -83,23 +81,27 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] | null }) 
         const contributionData = selectedPlan.contributions[0];
 
         try {
-            const premium = PricingEngine.calculatePremium(
+            // UPDATED: Use the new unified profile calculation
+            const profile = PricingEngine.calculateProfile(
                 contributionData,
                 members,
                 income
             );
 
-            const thresholds = PricingEngine.calculateThresholds(
-                contributionData,
-                members
-            );
-
+            // Network Penalty Logic (remains manual for now as it relies on UI state)
             let penalty = 0;
             if (selectedPlan.name.includes("Delta") && networkChoice !== 'Delta') {
                 penalty = 11100;
             }
 
-            return { premium, thresholds, penalty };
+            return {
+                premium: profile.monthlyPremium,
+                thresholds: {
+                    annualMSA: profile.savings.annualAllocation,
+                    selfPaymentGap: profile.thresholds.selfPaymentGap
+                },
+                penalty
+            };
         } catch (err) {
             console.error("Calculation Error:", err);
             return null;
@@ -112,8 +114,6 @@ export default function PlanCalculator({ plans }: { plans: PlanData[] | null }) 
     const decrement = (key: keyof typeof members) =>
         setMembers(prev => ({ ...prev, [key]: Math.max(0, prev[key] - 1) }));
 
-    // --- HELPER: SAFE SCHEME NAME EXTRACTION ---
-    // Handles both Array (One-to-Many) and Object (One-to-One) responses
     const getSchemeName = (plan: PlanData) => {
         const series = Array.isArray(plan.plan_series) ? plan.plan_series[0] : plan.plan_series;
         const scheme = Array.isArray(series?.schemes) ? series?.schemes[0] : series?.schemes;

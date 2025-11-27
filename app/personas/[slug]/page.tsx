@@ -1,147 +1,134 @@
 import { supabase } from '@/lib/supabase';
-import PlanCalculator from '@/components/PlanCalculator';
-import { ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { Metadata } from 'next';
+import PersonaDashboard from '@/components/PersonaDashboard';
 
-// Force dynamic rendering for fresh data
+// Force dynamic rendering to ensure fresh DB pulls
 export const dynamic = 'force-dynamic';
 
-// 1. Define the "Content Logic" for each Persona
+// 1. Content Logic (SEO & Context)
 const PERSONA_CONTENT: Record<string, any> = {
     'The Chronic Warrior': {
         title: 'Best Medical Aid for Chronic Conditions (2026)',
-        description: 'You need comprehensive cover for the 27 Chronic Disease List (CDL) conditions and potentially the Additional Disease List (ADL). These plans prioritize medication access over low premiums.',
-        pros: ['Full cover for chronic meds at network pharmacies', 'Access to Diabetes and Cardio Care programmes'],
-        cons: ['Higher premiums to subsidize risk', 'Strict formulary adherence required'],
+        description: 'Stop worrying about running out of funds. We modeled 50+ plans to find the ones that cover your meds and doctor visits.',
+        icon: 'Shield',
+        color: 'blue'
     },
     'The Digital Native': {
-        title: 'Best Tech-First Medical Aid Plans',
-        description: 'Maximize your efficiency with plans that reward digital engagement. Use "Ask Discovery" for referrals and track your health to unlock your Personal Health Fund.',
-        pros: ['R0 Video GP Consults', 'Up to R24,000 in Personal Health Funds', 'Efficiency discounts on premiums'],
-        cons: ['Heavy penalties for analog/offline behavior', 'Strict network restrictions'],
+        title: 'Tech-First Medical Aid: Pay Less, Get More',
+        description: 'Why pay for a "sleeping" medical aid? Unlock up to R24,000 in day-to-day funding just by tracking your healthy lifestyle.',
+        icon: 'Shield',
+        color: 'indigo'
     },
     'The Budget Conscious': {
-        title: 'Affordable Medical Aid for Cost-Conscious Families',
-        description: 'Entry-level cover that protects you from catastrophic hospital events without breaking the bank. Focuses on essential network hospitals and state facilities.',
-        pros: ['Lowest market premiums', 'Unlimited hospital cover in network'],
-        cons: ['No savings account (MSA)', 'Restricted provider lists'],
+        title: 'Affordable Private Healthcare (Under R1,500)',
+        description: 'Get access to private hospitals and doctors without breaking the bank. Income-based pricing for essential cover.',
+        icon: 'Shield',
+        color: 'green'
     },
-    // Add default fallback
     'default': {
-        title: 'Compare Medical Aid Plans',
-        description: 'Find the perfect plan for your lifestyle and budget.',
-        pros: [],
-        cons: []
+        title: 'Medical Aid Plan Comparison',
+        description: 'Find the plan that fits your life stage.',
+        icon: 'Shield',
+        color: 'slate'
     }
 };
 
-// UPDATED: Type definition includes Promise for params
-export default async function PersonaPage({ params }: { params: Promise<{ slug: string }> }) {
+type Props = {
+    params: Promise<{ slug: string }>;
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
-    // FIX: Await the params object before accessing slug
+// 2. Dynamic Metadata (Dominating the SERP)
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    const { slug } = await params;
+    const personaName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    const content = PERSONA_CONTENT[personaName] || PERSONA_CONTENT['default'];
+
+    return {
+        title: content.title,
+        description: content.description,
+        openGraph: {
+            title: content.title,
+            description: content.description,
+            type: 'website',
+        }
+    };
+}
+
+export default async function PersonaPage({ params }: Props) {
     const { slug } = await params;
 
-    // 2. Decode the Slug (e.g. "the-chronic-warrior" -> "The Chronic Warrior")
+    // Decode Slug
     const personaName = slug
         .split('-')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 
-    // 3. Fetch ONLY plans matching this Persona
+    // 3. Data Fetching (The "Protected Core")
+    // Note: We fetch ALL data here so the client component is instant
     const { data: plans, error } = await supabase
         .from('plans')
         .select(`
-      id,
-      name,
-      slug,
-      type,
-      target_personas,
-      contributions (
-        pricing_model,
-        pricing_matrix,
-        msa_structure,
-        threshold_structure
-      ),
-      benefits (
-        category,
-        benefit_name,
-        rule_logic,
-        display_text
-      )
-    `)
-        .contains('target_personas', [personaName]) // <--- THE MAGIC FILTER
+            id, name, slug, type, target_personas,
+            plan_series ( schemes ( name ) ),
+            contributions ( pricing_model, pricing_matrix, msa_structure, threshold_structure ),
+            benefits ( category, benefit_name, rule_logic, display_text )
+        `)
+        .contains('target_personas', [personaName])
         .order('name');
+
+    if (error || !plans) {
+        console.error("DB Error:", error);
+        return <div className="p-10 text-red-600">Unable to load plans. Please try again.</div>;
+    }
 
     const content = PERSONA_CONTENT[personaName] || PERSONA_CONTENT['default'];
 
     return (
         <main className="min-h-screen bg-slate-50 py-12 px-4">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-7xl mx-auto">
 
-                {/* Breadcrumb */}
-                <Link href="/" className="flex items-center text-sm text-slate-500 hover:text-blue-600 mb-8 transition-colors">
-                    <ArrowLeft className="w-4 h-4 mr-1" /> Back to All Plans
+                {/* 4. Breadcrumb (Navigation Guardrail) */}
+                <Link href="/" className="flex items-center text-sm text-slate-500 hover:text-blue-600 mb-8 transition-colors w-fit">
+                    <ArrowLeft className="w-4 h-4 mr-1" /> Back to Triage
                 </Link>
 
-                {/* Header Section */}
-                <div className="mb-12 text-center max-w-3xl mx-auto">
-                    <div className="inline-block px-4 py-1.5 bg-blue-100 text-blue-700 font-bold text-xs uppercase tracking-wider rounded-full mb-4">
-                        {personaName} Edition
-                    </div>
-                    <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-6 leading-tight">
+                {/* 5. Header Section */}
+                <div className="mb-10 animate-in slide-in-from-top-4 duration-500">
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-${content.color}-100 text-${content.color}-700 mb-4`}>
+                        {personaName} Hub
+                    </span>
+                    <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-4 leading-tight">
                         {content.title}
                     </h1>
-                    <p className="text-lg text-slate-600 leading-relaxed">
+                    <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">
                         {content.description}
                     </p>
                 </div>
 
-                {/* Pros & Cons Grid */}
-                {(content.pros.length > 0 || content.cons.length > 0) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-                        <div className="bg-green-50/50 border border-green-100 p-6 rounded-xl">
-                            <h3 className="text-green-800 font-bold mb-4 flex items-center gap-2">
-                                <CheckCircle2 className="w-5 h-5" /> Why this fits you
-                            </h3>
-                            <ul className="space-y-3">
-                                {content.pros.map((pro: string, i: number) => (
-                                    <li key={i} className="flex items-start gap-3 text-green-900/80 text-sm">
-                                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                                        {pro}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
+                {/* 6. The Living Dashboard (Client Component Handoff) */}
+                <PersonaDashboard
+                    persona={personaName}
+                    plans={plans}
+                    content={content}
+                />
 
-                        <div className="bg-amber-50/50 border border-amber-100 p-6 rounded-xl">
-                            <h3 className="text-amber-800 font-bold mb-4 flex items-center gap-2">
-                                <AlertTriangle className="w-5 h-5" /> What to watch out for
-                            </h3>
-                            <ul className="space-y-3">
-                                {content.cons.map((con: string, i: number) => (
-                                    <li key={i} className="flex items-start gap-3 text-amber-900/80 text-sm">
-                                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                                        {con}
-                                    </li>
-                                ))}
-                            </ul>
+                {/* 7. SEO Anchor: Semantic Definitions (AI Overview Bait) */}
+                <div className="mt-20 border-t border-slate-200 pt-10">
+                    <h3 className="text-xl font-bold text-slate-900 mb-6">Key Terms for {personaName}s</h3>
+                    <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        <div className="bg-white p-4 rounded-lg border border-slate-100">
+                            <dt className="font-bold text-slate-800 text-sm mb-1">Prescribed Minimum Benefit (PMB)</dt>
+                            <dd className="text-slate-600 text-xs leading-relaxed">A set of defined benefits to ensure that all medical scheme members have access to certain minimum health services, regardless of the benefit option they have selected.</dd>
                         </div>
-                    </div>
-                )}
-
-                {/* The Calculator (Pre-filtered by the DB Query above) */}
-                {plans && plans.length > 0 ? (
-                    <div className="bg-white p-1 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
-                        <PlanCalculator plans={plans} />
-                    </div>
-                ) : (
-                    <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-300">
-                        <p className="text-slate-500">No plans found specifically matching "{personaName}".</p>
-                        <Link href="/" className="text-blue-600 font-bold hover:underline mt-2 inline-block">
-                            View all plans
-                        </Link>
-                    </div>
-                )}
+                        <div className="bg-white p-4 rounded-lg border border-slate-100">
+                            <dt className="font-bold text-slate-800 text-sm mb-1">Self-Payment Gap (SPG)</dt>
+                            <dd className="text-slate-600 text-xs leading-relaxed">The difference between your Medical Savings Account (MSA) allocation and the Annual Threshold. During this period, you must pay for day-to-day claims from your own pocket.</dd>
+                        </div>
+                    </dl>
+                </div>
 
             </div>
         </main>
